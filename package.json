@@ -1,0 +1,39 @@
+{
+  "name": "indonesia-air-watch",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "telegram:owner-id": "tsx src/cli/telegram-owner-id.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "6.7.0",
+    "@telegraf/types": "^7.1.0",
+    "fastify": "^5.3.2",
+    "openai": "^5.1.1",
+    "pino": "^9.7.0",
+    "pino-pretty": "^13.0.0",
+    "telegraf": "^4.16.3",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.26.0",
+    "@types/node": "^22.15.18",
+    "eslint": "^9.26.0",
+    "globals": "^16.1.0",
+    "prisma": "6.7.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.32.0",
+    "vitest": "^3.1.3"
+  }
+}
