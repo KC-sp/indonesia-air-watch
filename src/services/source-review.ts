@@ -12,7 +12,9 @@ export class SourceReviewService {
   async discover(): Promise<SourceCandidateResult[]> {
     if (!this.client || !this.model) return [];
     const response = await this.client.responses.create({ model: this.model, store: false, tools: [{ type: 'web_search', filters: { allowed_domains: this.allowedDomains } }], include: ['web_search_call.action.sources' as never], input: 'Assess only official Indonesian-government, public, documented, permitted, machine-readable ISPU sources. Return JSON {"candidates":[{"agency":"","domain":"","metric":"","period":"","coverage":"","updateFrequency":"","latestTimestamp":"","endpoint":"https://","permission":"","confidenceScore":0,"recommendation":"approve|reject|review"}]}. Reject ambiguous timestamps, unofficial sources, AQI/PSI misuse, access-control bypasses, and brittle scraping.' });
-    const parsed = Discovery.safeParse(JSON.parse(response.output_text || '{"candidates":[]}'));
+    let output: unknown;
+    try { output = JSON.parse(response.output_text || '{"candidates":[]}'); } catch { return []; }
+    const parsed = Discovery.safeParse(output);
     if (!parsed.success) return [];
     const safe = parsed.data.candidates.filter((candidate) => this.isAllowed(candidate.domain) && this.isAllowed(candidate.endpoint));
     return Promise.all(safe.map(async (candidate) => {

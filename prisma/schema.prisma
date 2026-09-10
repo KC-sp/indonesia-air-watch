@@ -21,7 +21,10 @@ enum ProviderState {
 model UserSettings {
   id                 Int      @id @default(1)
   nationalSample     Json     @default("[]")
-  officialAllowlist  Json     @default("[\"indonesia.go.id\",\"klhk.go.id\",\"bmkg.go.id\",\"bnpb.go.id\"]")
+  officialAllowlist  Json     @default("[\"indonesia.go.id\",\"kemenlh.go.id\",\"menlhk.go.id\",\"klhk.go.id\",\"bmkg.go.id\",\"bnpb.go.id\",\"data.go.id\",\"jakarta.go.id\"]")
+  alertThreshold     Int?
+  alertsEnabled      Boolean  @default(false)
+  dailySummaryHour   Int      @default(20)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }
@@ -61,6 +64,15 @@ model AirObservation {
 model HourlyDispatch {
   id         String   @id @default(cuid())
   hourBucket DateTime @unique
+  status     String   @default("SENDING")
+  sentAt     DateTime?
+  error      String?
+  createdAt  DateTime @default(now())
+}
+
+model DailyDispatch {
+  id         String   @id @default(cuid())
+  dayBucket  DateTime @unique
   status     String   @default("SENDING")
   sentAt     DateTime?
   error      String?

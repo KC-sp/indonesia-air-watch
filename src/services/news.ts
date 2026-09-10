@@ -25,7 +25,9 @@ export class OfficialNewsService {
       include: ['web_search_call.action.sources' as never],
       input: `Find 3 to 5 recent official Indonesian-government news articles about ${topic}. Open and inspect each original article before including it. The URL must be the direct canonical page where the named government agency originally published the article. Exclude search-result pages, category pages, homepages, social-media posts, aggregators, mirrors, and articles that merely quote an original source. Use the publication date displayed on the original page; do not guess. Summarize only claims supported by that page. Return JSON only: {"items":[{"title":"","date":"","publisher":"official agency name","domain":"official-domain.go.id","url":"direct original article URL","summary":"short English summary"}]}. Do not use any non-official source.`,
     });
-    const parsed = Result.safeParse(JSON.parse(response.output_text || '{"items":[]}'));
+    let output: unknown;
+    try { output = JSON.parse(response.output_text || '{"items":[]}'); } catch { return []; }
+    const parsed = Result.safeParse(output);
     if (!parsed.success) return [];
     return parsed.data.items.filter((item) => this.isDirectAllowedArticle(item.url, item.domain));
   }

@@ -1,0 +1,13 @@
+ALTER TABLE "UserSettings"
+  ADD COLUMN "alertThreshold" INTEGER,
+  ADD COLUMN "alertsEnabled" BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN "dailySummaryHour" INTEGER NOT NULL DEFAULT 20;
+
+CREATE TABLE "DailyDispatch" (
+  "id" TEXT PRIMARY KEY,
+  "dayBucket" TIMESTAMP(3) NOT NULL UNIQUE,
+  "status" TEXT NOT NULL DEFAULT 'SENDING',
+  "sentAt" TIMESTAMP(3),
+  "error" TEXT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

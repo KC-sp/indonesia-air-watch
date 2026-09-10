@@ -1,5 +1,6 @@
 node_modules/
 node_modules.old/
+node_modules.*/
 dist/
 .env
 .railway/

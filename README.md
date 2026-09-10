@@ -1,6 +1,6 @@
 # Indonesia Air Watch
 
-Indonesia Air Watch is a private, owner-only Telegram bot that sends an hourly Indonesia iQAir city-sample update at minute 0 in Asia/Singapore, supports up to three extra iQAir locations, and can report approved official Indonesian ISPU readings.
+Indonesia Air Watch is a private, owner-only Telegram bot that sends an hourly Indonesia iQAir city-sample update, tracks custom Indonesian cities, stores trends, sends threshold alerts and daily summaries, and can report approved official Indonesian ISPU readings.
 
 It does not use the term PSI. iQAir values are always labelled **US AQI iQAir**. Indonesian government values are only displayed as **ISPU <agency>** with their metric and stated period. The bot never converts one scale to another.
 
@@ -38,25 +38,32 @@ The service exposes `GET /health` and `GET /ready`. It uses Telegram long pollin
 
 1. Push this directory to GitHub and create a Railway project from the repository.
 2. Add Railway PostgreSQL and copy its `DATABASE_URL` into the service variables.
-3. Set `TELEGRAM_BOT_TOKEN`, `OWNER_TELEGRAM_USER_ID`, `IQAIR_API_KEY`, `OPENAI_API_KEY`, and `OPENAI_MODEL` as Railway variables. Do not put them in source control.
-4. Railway builds the supplied Dockerfile and runs `prisma migrate deploy` before starting the service. Its readiness check uses `/ready`.
+3. Set `TELEGRAM_BOT_TOKEN`, `OWNER_TELEGRAM_USER_ID`, `IQAIR_API_KEY`, `OPENAI_API_KEY`, and `OPENAI_MODEL` as Railway variables. OpenAI variables are optional and power `/news`, `/sources`, and `/explain`.
+4. Leave `OFFICIAL_ISPU_API_URL` and `OFFICIAL_ISPU_AGENCY` unset unless you have approved a documented government JSON endpoint. If enabled, the URL must use HTTPS on a `.go.id` domain and return the validated schema described below.
+5. Railway builds the supplied Dockerfile and runs `prisma migrate deploy` before starting the service. Its readiness check uses `/ready`.
 
 ## iQAir usage and national sample
 
-The national value is a geographically representative set of up to 12 configured iQAir cities. It is an arithmetic average of responding sample cities only, never an official national average. Coverage is shown explicitly. A persistent daily cap of 400 iQAir requests and a five-per-minute cap protect the Community-tier allocation. Cached readings are fresh for 15 minutes; unavailable or partial data is labelled as such.
+The national value is a geographically representative set of up to 12 configured iQAir cities. It is an arithmetic average of responding sample cities only, never an official national average. Coverage is shown explicitly. A persistent daily cap of 400 iQAir requests and a five-per-minute cap protect the Community-tier allocation. Scheduled reports wait for later minute slots, so a complete 12-city report can arrive two to three minutes after the hour. Tracked locations are collected first. Manual `/status` calls never consume or suppress the automatic hourly dispatch record.
+
+All displayed observation times use WIB and SGT instead of raw UTC. Each reading includes the provider and direct data page. `/trend city` summarizes stored 24-hour observations. `/daily` shows the same daily summary that is automatically sent at 20:00 SGT. `/diagnostics` reports service, database, provider, quota, dispatch, and integration status.
+
+Enable hourly threshold warnings with `/setalert 150`, inspect them with `/alerts`, and disable them with `/removealert`. Alerts use US AQI iQAir and do not convert values to PSI or ISPU.
 
 ## Official Indonesian ISPU sources
 
-No official ISPU provider is enabled by default. The active adapter returns `Official ISPU currently unavailable` until an owner reviews and explicitly approves a documented, public, permitted, machine-readable government source. The bot must not scrape protected pages, bypass access controls, or use iQAir values in place of ISPU. A future approved adapter must retain agency, station, metric, period, observation time, and direct source URL.
+No official ISPU provider is enabled by default. The active adapter returns `Official ISPU currently unavailable` until an owner reviews and explicitly approves a documented, public, permitted, machine-readable government source. The bot must not scrape protected pages, bypass access controls, or use iQAir values in place of ISPU.
+
+The optional deterministic JSON adapter requires `OFFICIAL_ISPU_API_URL` and `OFFICIAL_ISPU_AGENCY`. It accepts only HTTPS `.go.id` endpoints and validates this response shape: `{ "value": 85, "metric": "ISPU PM2.5", "city": "Jakarta", "category": "Sedang", "observedAt": "ISO timestamp", "period": "24-hour", "station": "station name", "sourceUrl": "https://...go.id/..." }`. It rejects mismatched cities, malformed data, and non-government source URLs.
 
 `/sources` is intentionally informational until a vetted source-discovery workflow has produced a PostgreSQL candidate. `/approvesource` must only approve a recorded candidate after the owner explicitly confirms it; approval alone does not make the AI fetch readings. A deterministic adapter is still required.
 
 ## OpenAI news
 
-OpenAI Responses API calls are limited to official-news summaries and source assessment. The news service uses a configurable exact-domain allowlist, requests web-search sources, validates each resulting URL against that allowlist, and sets `store: false`. It is not involved in scheduled air collection, authorization, configuration, database updates, or Telegram dispatch.
+OpenAI Responses API calls are limited to official-news summaries, source assessment, and `/explain` trend explanations. The news service uses an official-domain allowlist, requests web-search sources, validates each resulting URL, and sets `store: false`. AI never supplies, changes, converts, or estimates an air-quality measurement and is not involved in authorization or Telegram dispatch.
 
 ## Commands
 
-`/start`, `/status`, `/air city[, state]`, `/setregion`, `/regions`, `/removeregion`, `/news [topic]`, `/sources`, `/approvesource source-id`, `/version`, `/whoami`, `/help`.
+`/start`, `/status`, `/air city[, state]`, `/setregion`, `/addregion city, state`, `/regions`, `/removeregion`, `/setalert number`, `/alerts`, `/removealert`, `/trend city`, `/daily`, `/explain city`, `/diagnostics`, `/news [topic]`, `/sources`, `/approvesource source-id CONFIRM`, `/version`, `/whoami`, `/help`.
 
 Every command, text update, inline keyboard action, and callback is checked against `OWNER_TELEGRAM_USER_ID`. A non-owner receives only `This is a private bot.`
