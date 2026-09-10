@@ -7,6 +7,11 @@ describe('air accuracy rules', () => {
   it('calculates only valid sample readings and coverage', () => expect(calculateSampleAverage([reading(40), reading(60)], 12)).toEqual({ value: 50, reported: 2, expected: 12 }));
   it('never renders PSI and labels iQAir as US AQI', () => { const text = `${formatReading(reading(60))}\n${hourlyMessage(calculateSampleAverage([reading(60)], 12), [])}`; expect(text).toContain('US AQI iQAir'); expect(text).not.toMatch(/PSI/i); });
   it('marks unavailable official readings clearly', () => expect(hourlyMessage(calculateSampleAverage([], 12), [])).toContain('Official ISPU currently unavailable.'));
+  it('keeps a tracked city visible when its reading is unavailable', () => {
+    const text = hourlyMessage(calculateSampleAverage([], 12), [], undefined, [{ city: 'Jakarta', state: 'Jakarta' }]);
+    expect(text).toContain('Tracked locations:');
+    expect(text).toContain('Jakarta, Jakarta: US AQI iQAir temporarily unavailable');
+  });
 });
 
 class MemoryStore implements QuotaStore {

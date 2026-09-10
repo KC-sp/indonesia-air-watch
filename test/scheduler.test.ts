@@ -11,7 +11,20 @@ describe('hourly dispatch de-duplication', () => {
   });
   it('does not send when another replica owns the hour', async () => {
     const send = vi.fn();
-    await expect(dispatchOnce({ hourlyDispatch: { create: vi.fn().mockRejectedValue(new Error('unique')), update: vi.fn() } } as never, send, new Date('2026-01-01T01:00:10Z'))).resolves.toBe(false);
+    await expect(dispatchOnce({ hourlyDispatch: { create: vi.fn().mockRejectedValue({ code: 'P2002' }), updateMany: vi.fn().mockResolvedValue({ count: 0 }), update: vi.fn() } } as never, send, new Date('2026-01-01T01:00:10Z'))).resolves.toBe(false);
+    expect(send).not.toHaveBeenCalled();
+  });
+  it('retries a dispatch recorded as failed', async () => {
+    const send = vi.fn().mockResolvedValue(undefined);
+    const update = vi.fn().mockResolvedValue({});
+    await expect(dispatchOnce({ hourlyDispatch: { create: vi.fn().mockRejectedValue({ code: 'P2002' }), updateMany: vi.fn().mockResolvedValue({ count: 1 }), update } } as never, send, new Date('2026-01-01T01:00:10Z'))).resolves.toBe(true);
+    expect(send).toHaveBeenCalledOnce();
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'SENT' }) }));
+  });
+  it('does not hide database failures as duplicate dispatches', async () => {
+    const send = vi.fn();
+    const failure = new Error('database unavailable');
+    await expect(dispatchOnce({ hourlyDispatch: { create: vi.fn().mockRejectedValue(failure), update: vi.fn() } } as never, send, new Date('2026-01-01T01:00:10Z'))).rejects.toThrow('database unavailable');
     expect(send).not.toHaveBeenCalled();
   });
 });

@@ -14,6 +14,8 @@ type TrackedLocationRecord = {
   updatedAt: Date;
 };
 
+export type TrackedAirStatus = { readings: Reading[]; unavailable: City[] };
+
 export class AirService {
   constructor(private readonly db: PrismaClient, private readonly iqair: IqAirProvider, private readonly official: OfficialIspuProvider, private readonly sampleLimit: number) {}
 
@@ -30,9 +32,19 @@ export class AirService {
   }
 
   async tracked(): Promise<Reading[]> {
+    return (await this.trackedStatus()).readings;
+  }
+
+  async trackedStatus(): Promise<TrackedAirStatus> {
     const locations: TrackedLocationRecord[] = await this.db.trackedLocation.findMany({ orderBy: { createdAt: 'asc' } });
-    const readings = await Promise.all(locations.filter((x) => x.provider === 'iqair').map((x) => this.currentIqAir({ city: x.city, state: x.state ?? '' })));
-    return readings.filter((r): r is Reading => Boolean(r));
+    const iqairLocations = locations.filter((x) => x.provider === 'iqair');
+    const readings = await Promise.all(iqairLocations.map((x) => this.currentIqAir({ city: x.city, state: x.state ?? '' })));
+    return iqairLocations.reduce<TrackedAirStatus>((status, location, index) => {
+      const reading = readings[index];
+      if (reading) status.readings.push(reading);
+      else status.unavailable.push({ city: location.city, state: location.state ?? '' });
+      return status;
+    }, { readings: [], unavailable: [] });
   }
 
   async trackedLocations(): Promise<TrackedLocationRecord[]> { return this.db.trackedLocation.findMany({ where: { provider: 'iqair' }, orderBy: { createdAt: 'asc' } }); }

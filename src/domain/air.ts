@@ -27,12 +27,12 @@ export function formatReading(reading: Reading): string {
   return `${stale}${reading.city}: ${metric} ${reading.value}${category}, observed ${reading.observedAt.toISOString()}\nSource: ${source} ${reading.sourceUrl}`;
 }
 
-export function hourlyMessage(sample: ReturnType<typeof calculateSampleAverage>, tracked: Reading[], official?: Reading): string {
+export function hourlyMessage(sample: ReturnType<typeof calculateSampleAverage>, tracked: Reading[], official?: Reading, unavailableTracked: City[] = []): string {
   const headline = sample.value === undefined
     ? 'Indonesia iQAir sample average: unavailable'
     : `Indonesia iQAir sample average: ${sample.value} US AQI iQAir`;
   const lines = [headline, `Coverage: ${sample.reported} of ${sample.expected} sample cities reporting`, 'Source: iQAir'];
-  if (tracked.length) lines.push('', 'Tracked locations:', ...tracked.map(formatReading));
+  if (tracked.length || unavailableTracked.length) lines.push('', 'Tracked locations:', ...tracked.map(formatReading), ...unavailableTracked.map((location) => `${location.city}${location.state ? `, ${location.state}` : ''}: US AQI iQAir temporarily unavailable`));
   lines.push('', official ? formatReading(official) : 'Official ISPU currently unavailable.');
   return lines.join('\n');
 }

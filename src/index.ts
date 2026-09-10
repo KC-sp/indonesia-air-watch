@@ -28,10 +28,12 @@ async function main() {
   app.get('/ready', async (_request, reply) => { try { await prisma.$queryRaw`SELECT 1`; return { status: 'ready' }; } catch { return reply.code(503).send({ status: 'not ready' }); } });
   await app.listen({ port: config.PORT, host: '0.0.0.0' });
   await bot.launch({ dropPendingUpdates: false });
-  const sendHourly = async () => { const sample = await air.sample(); const tracked = await air.tracked(); await bot.telegram.sendMessage(config.OWNER_TELEGRAM_USER_ID, hourlyMessage(sample.average, tracked)); };
+  const sendHourly = async () => { const tracked = await air.trackedStatus(); const sample = await air.sample(); await bot.telegram.sendMessage(config.OWNER_TELEGRAM_USER_ID, hourlyMessage(sample.average, tracked.readings, undefined, tracked.unavailable)); };
   startHourlyScheduler(prisma, sendHourly);
-  // Send exactly once for the current SGT-aligned hour only when an operator deliberately starts at minute 0.
-  if (new Date().getUTCMinutes() === 0) await dispatchOnce(prisma, sendHourly).catch((error) => logger.warn(error, 'initial dispatch skipped'));
+  // Catch up after a deploy or restart. The hour-bucket constraint prevents duplicate messages.
+  await dispatchOnce(prisma, sendHourly)
+    .then((sent) => logger.info({ sent }, sent ? 'startup hourly dispatch sent' : 'startup hourly dispatch already handled'))
+    .catch((error) => logger.warn(error, 'startup hourly dispatch failed'));
   const shutdown = async () => { await bot.stop(); await app.close(); await prisma.$disconnect(); };
   process.once('SIGINT', shutdown); process.once('SIGTERM', shutdown);
 }
