@@ -38,8 +38,6 @@ export class AirService {
   async trackedLocations(): Promise<TrackedLocationRecord[]> { return this.db.trackedLocation.findMany({ where: { provider: 'iqair' }, orderBy: { createdAt: 'asc' } }); }
 
   async addTracked(city: City): Promise<'added' | 'duplicate' | 'limit'> {
-    const sample = await this.nationalSample();
-    if (sample.some((x) => x.city.toLowerCase() === city.city.toLowerCase())) return 'duplicate';
     const existing: TrackedLocationRecord[] = await this.db.trackedLocation.findMany({ where: { provider: 'iqair' } });
     if (existing.some((x) => x.city.toLowerCase() === city.city.toLowerCase())) return 'duplicate';
     if (existing.length >= 3) return 'limit';
