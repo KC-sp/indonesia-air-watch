@@ -35,7 +35,21 @@ async function main() {
   app.get('/health', async () => ({ status: 'ok' }));
   app.get('/ready', async (_request, reply) => { try { await prisma.$queryRaw`SELECT 1`; return { status: 'ready' }; } catch { return reply.code(503).send({ status: 'not ready' }); } });
   await app.listen({ port: config.PORT, host: '0.0.0.0' });
-  await bot.launch({ dropPendingUpdates: false });
+  // Telegraf's polling promise stays pending for the lifetime of the bot. Wait only
+  // for its launch callback so the schedulers below can start while polling runs.
+  let pollingStarted = false;
+  await new Promise<void>((resolve, reject) => {
+    void bot.launch({ dropPendingUpdates: false }, () => {
+      pollingStarted = true;
+      resolve();
+    }).catch((error) => {
+      if (!pollingStarted) reject(error);
+      else {
+        logger.error(safeErrorDetails(error), 'Telegram polling stopped unexpectedly');
+        process.exit(1);
+      }
+    });
+  });
   const sendHourly = async () => {
     const tracked = await air.trackedStatus(true);
     const sample = await air.sample(true);
@@ -57,9 +71,13 @@ async function main() {
   process.once('SIGINT', shutdown); process.once('SIGTERM', shutdown);
 }
 main().catch((error) => {
-  const rawMessage = error instanceof Error ? error.message : String(error);
-  const secrets = [process.env.TELEGRAM_BOT_TOKEN, process.env.IQAIR_API_KEY, process.env.OPENAI_API_KEY].filter((value): value is string => Boolean(value));
-  const safeMessage = secrets.reduce((message, secret) => message.replaceAll(secret, '[REDACTED]'), rawMessage);
-  logger.fatal({ errorName: error instanceof Error ? error.name : 'UnknownError', errorMessage: safeMessage }, 'startup failed');
+  logger.fatal(safeErrorDetails(error), 'startup failed');
   process.exit(1);
 });
+
+function safeErrorDetails(error: unknown) {
+  const rawMessage = error instanceof Error ? error.message : String(error);
+  const secrets = [process.env.TELEGRAM_BOT_TOKEN, process.env.IQAIR_API_KEY, process.env.OPENAI_API_KEY].filter((value): value is string => Boolean(value));
+  const errorMessage = secrets.reduce((message, secret) => message.replaceAll(secret, '[REDACTED]'), rawMessage);
+  return { errorName: error instanceof Error ? error.name : 'UnknownError', errorMessage };
+}
