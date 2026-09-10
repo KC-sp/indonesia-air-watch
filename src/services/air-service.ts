@@ -3,6 +3,17 @@ import { calculateSampleAverage, DEFAULT_SAMPLE, type City, type Reading } from 
 import { IqAirProvider } from '../providers/iqair.js';
 import type { OfficialIspuProvider } from '../providers/official.js';
 
+type TrackedLocationRecord = {
+  id: string;
+  provider: string;
+  city: string;
+  state: string | null;
+  country: string;
+  stationId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 export class AirService {
   constructor(private readonly db: PrismaClient, private readonly iqair: IqAirProvider, private readonly official: OfficialIspuProvider, private readonly sampleLimit: number) {}
 
@@ -19,17 +30,17 @@ export class AirService {
   }
 
   async tracked(): Promise<Reading[]> {
-    const locations = await this.db.trackedLocation.findMany({ orderBy: { createdAt: 'asc' } });
+    const locations: TrackedLocationRecord[] = await this.db.trackedLocation.findMany({ orderBy: { createdAt: 'asc' } });
     const readings = await Promise.all(locations.filter((x) => x.provider === 'iqair').map((x) => this.currentIqAir({ city: x.city, state: x.state ?? '' })));
     return readings.filter((r): r is Reading => Boolean(r));
   }
 
-  async trackedLocations() { return this.db.trackedLocation.findMany({ where: { provider: 'iqair' }, orderBy: { createdAt: 'asc' } }); }
+  async trackedLocations(): Promise<TrackedLocationRecord[]> { return this.db.trackedLocation.findMany({ where: { provider: 'iqair' }, orderBy: { createdAt: 'asc' } }); }
 
   async addTracked(city: City): Promise<'added' | 'duplicate' | 'limit'> {
     const sample = await this.nationalSample();
     if (sample.some((x) => x.city.toLowerCase() === city.city.toLowerCase())) return 'duplicate';
-    const existing = await this.db.trackedLocation.findMany({ where: { provider: 'iqair' } });
+    const existing: TrackedLocationRecord[] = await this.db.trackedLocation.findMany({ where: { provider: 'iqair' } });
     if (existing.some((x) => x.city.toLowerCase() === city.city.toLowerCase())) return 'duplicate';
     if (existing.length >= 3) return 'limit';
     await this.db.trackedLocation.create({ data: { provider: 'iqair', city: city.city, state: city.state } });

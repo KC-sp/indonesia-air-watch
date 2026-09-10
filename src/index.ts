@@ -35,4 +35,10 @@ async function main() {
   const shutdown = async () => { await bot.stop(); await app.close(); await prisma.$disconnect(); };
   process.once('SIGINT', shutdown); process.once('SIGTERM', shutdown);
 }
-main().catch((error) => { logger.fatal(error, 'startup failed'); process.exit(1); });
+main().catch((error) => {
+  const rawMessage = error instanceof Error ? error.message : String(error);
+  const secrets = [process.env.TELEGRAM_BOT_TOKEN, process.env.IQAIR_API_KEY, process.env.OPENAI_API_KEY].filter((value): value is string => Boolean(value));
+  const safeMessage = secrets.reduce((message, secret) => message.replaceAll(secret, '[REDACTED]'), rawMessage);
+  logger.fatal({ errorName: error instanceof Error ? error.name : 'UnknownError', errorMessage: safeMessage }, 'startup failed');
+  process.exit(1);
+});
