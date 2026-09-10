@@ -1,6 +1,6 @@
 # Indonesia Air Watch
 
-Indonesia Air Watch is a private, owner-only Telegram bot that sends an hourly Indonesia iQAir city-sample update, tracks custom Indonesian cities, stores trends, sends threshold alerts and daily summaries, and can report approved official Indonesian ISPU readings.
+Indonesia Air Watch is a private, owner-only Telegram bot that sends an hourly Indonesia iQAir city-sample update, tracks up to five custom Indonesian cities by default, stores trends, creates daily and weekly PNG graphs, sends threshold alerts and daily summaries, and can report approved official Indonesian ISPU readings.
 
 It does not use the term PSI. iQAir values are always labelled **US AQI iQAir**. Indonesian government values are only displayed as **ISPU <agency>** with their metric and stated period. The bot never converts one scale to another.
 
@@ -48,6 +48,8 @@ The national value is a geographically representative set of up to 12 configured
 
 All displayed observation times use WIB and SGT instead of raw UTC. Each reading includes the provider and direct data page. `/trend city` summarizes stored 24-hour observations. `/daily` shows the same daily summary that is automatically sent at 20:00 SGT. `/diagnostics` reports service, database, provider, quota, dispatch, and integration status.
 
+`/trendgraph Jakarta daily` creates a graph from the last 24 hours of stored readings. `/trendgraph Jakarta weekly` uses the last seven days. The caption shows latest, average, low, high, direction, and cautious US AQI activity guidance sourced from AirNow. Graph generation is local and does not use OpenAI or transmit readings to another chart provider.
+
 Enable hourly threshold warnings with `/setalert 150`, inspect them with `/alerts`, and disable them with `/removealert`. Alerts use US AQI iQAir and do not convert values to PSI or ISPU.
 
 ## Official Indonesian ISPU sources
@@ -64,6 +66,8 @@ OpenAI Responses API calls are limited to official-news summaries, source assess
 
 ## Commands
 
-`/start`, `/status`, `/air city[, state]`, `/setregion`, `/addregion city, state`, `/regions`, `/removeregion`, `/setalert number`, `/alerts`, `/removealert`, `/trend city`, `/daily`, `/explain city`, `/diagnostics`, `/news [topic]`, `/sources`, `/approvesource source-id CONFIRM`, `/version`, `/whoami`, `/help`.
+`/start`, `/status`, `/air city[, state]`, `/setregion`, `/addregion city, state`, `/regions`, `/removeregion`, `/setalert number`, `/alerts`, `/removealert`, `/trend city`, `/trendgraph city daily|weekly`, `/daily`, `/explain city`, `/diagnostics`, `/news [topic]`, `/sources`, `/approvesource source-id CONFIRM`, `/version`, `/whoami`, `/help`.
+
+`/help` uses a small category button menu so the owner does not need to read or remember the complete command list at once.
 
 Every command, text update, inline keyboard action, and callback is checked against `OWNER_TELEGRAM_USER_ID`. A non-owner receives only `This is a private bot.`

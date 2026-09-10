@@ -64,3 +64,12 @@ export function dailySummaryMessage(trends: TrendSummary[]): string {
   lines.push('', 'Values are US AQI iQAir, not PSI or official Indonesian ISPU.');
   return lines.join('\n\n');
 }
+
+export function aqiActionGuidance(value: number): string {
+  if (value <= 50) return 'AirNow guidance: usual outdoor activities are appropriate.';
+  if (value <= 100) return 'AirNow guidance: unusually sensitive people can consider reducing prolonged or heavy outdoor exertion.';
+  if (value <= 150) return 'AirNow guidance: sensitive groups should reduce prolonged or heavy outdoor exertion.';
+  if (value <= 200) return 'AirNow guidance: sensitive groups should avoid prolonged or heavy outdoor exertion; everyone else should limit it.';
+  if (value <= 300) return 'AirNow guidance: everyone should significantly reduce outdoor physical activity; sensitive groups should avoid it.';
+  return 'AirNow guidance: everyone should avoid outdoor physical activity.';
+}

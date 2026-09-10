@@ -19,7 +19,7 @@ const schema = z.object({
   NODE_ENV: z.preprocess(blankToUndefined, z.enum(['development', 'test', 'production']).default('development')),
   PORT: z.preprocess(blankToUndefined, z.coerce.number().int().positive().default(3000)),
   NATIONAL_SAMPLE_CITY_LIMIT: z.preprocess(blankToUndefined, z.coerce.number().int().min(1).max(12).default(12)),
-  TRACKED_IQAIR_CITY_LIMIT: z.preprocess(blankToUndefined, z.coerce.number().int().min(1).max(3).default(3)),
+  TRACKED_IQAIR_CITY_LIMIT: z.preprocess(blankToUndefined, z.coerce.number().int().min(1).max(10).default(5)),
 });
 
 export type Config = z.infer<typeof schema>;

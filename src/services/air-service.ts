@@ -16,6 +16,7 @@ type TrackedLocationRecord = {
 
 export type TrackedAirStatus = { readings: Reading[]; unavailable: City[] };
 export type TrendSummary = { city: string; hours: number; count: number; minimum?: number; maximum?: number; average?: number; latest?: number; direction: 'improving' | 'worsening' | 'steady' | 'unavailable' };
+export type TrendPoint = { observedAt: Date; value: number };
 
 export class AirService {
   constructor(private readonly db: PrismaClient, private readonly iqair: IqAirProvider, private readonly official: OfficialIspuProvider, private readonly sampleLimit: number, private readonly trackedLimit = 3) {}
@@ -83,12 +84,16 @@ export class AirService {
   }
 
   async trend(city: string, hours = 24): Promise<TrendSummary> {
-    const since = new Date(Date.now() - hours * 3_600_000);
-    const observations = await this.db.airObservation.findMany({ where: { provider: 'iqair', city: { equals: city, mode: 'insensitive' }, observedAt: { gte: since } }, orderBy: { observedAt: 'asc' } });
+    const observations = await this.trendSeries(city, hours);
     if (!observations.length) return { city, hours, count: 0, direction: 'unavailable' };
-    const values: number[] = observations.map((item: { value: number }) => item.value);
+    const values = observations.map((item) => item.value);
     const change = values.at(-1)! - values[0];
-    return { city: observations.at(-1)!.city, hours, count: values.length, minimum: Math.min(...values), maximum: Math.max(...values), average: Math.round(values.reduce((sum, value) => sum + value, 0) / values.length), latest: values.at(-1), direction: change <= -5 ? 'improving' : change >= 5 ? 'worsening' : 'steady' };
+    return { city, hours, count: values.length, minimum: Math.min(...values), maximum: Math.max(...values), average: Math.round(values.reduce((sum, value) => sum + value, 0) / values.length), latest: values.at(-1), direction: change <= -5 ? 'improving' : change >= 5 ? 'worsening' : 'steady' };
+  }
+
+  async trendSeries(city: string, hours = 24): Promise<TrendPoint[]> {
+    const since = new Date(Date.now() - hours * 3_600_000);
+    return this.db.airObservation.findMany({ where: { provider: 'iqair', city: { equals: city, mode: 'insensitive' }, observedAt: { gte: since } }, orderBy: { observedAt: 'asc' }, select: { observedAt: true, value: true } });
   }
 
   async trackedTrends(hours = 24): Promise<TrendSummary[]> {

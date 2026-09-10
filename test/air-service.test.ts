@@ -16,7 +16,7 @@ describe('tracked air service', () => {
   });
 
   it('summarizes stored observations without inventing values', async () => {
-    const db = { airObservation: { findMany: vi.fn().mockResolvedValue([{ city: 'Jakarta', value: 160 }, { city: 'Jakarta', value: 120 }]) } };
+    const db = { airObservation: { findMany: vi.fn().mockResolvedValue([{ observedAt: new Date('2026-01-01T00:00:00Z'), value: 160 }, { observedAt: new Date('2026-01-01T01:00:00Z'), value: 120 }]) } };
     const service = new AirService(db as never, {} as never, unavailableOfficial, 12, 3);
     await expect(service.trend('Jakarta')).resolves.toMatchObject({ city: 'Jakarta', count: 2, minimum: 120, maximum: 160, average: 140, latest: 120, direction: 'improving' });
   });

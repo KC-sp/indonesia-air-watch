@@ -8,4 +8,8 @@ describe('Railway configuration', () => {
     expect(config.OPENAI_API_KEY).toBeUndefined();
     expect(config.NODE_ENV).toBe('production');
   });
+  it('supports five tracked locations by default and up to ten when configured', () => {
+    expect(loadConfig({}).TRACKED_IQAIR_CITY_LIMIT).toBe(5);
+    expect(loadConfig({ TRACKED_IQAIR_CITY_LIMIT: '10' }).TRACKED_IQAIR_CITY_LIMIT).toBe(10);
+  });
 });

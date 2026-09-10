@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateSampleAverage, dailySummaryMessage, formatReading, hourlyMessage } from '../src/domain/air.js';
+import { aqiActionGuidance, calculateSampleAverage, dailySummaryMessage, formatReading, hourlyMessage } from '../src/domain/air.js';
 import { IqAirQuota, type QuotaStore } from '../src/services/quota.js';
 
 const reading = (value: number) => ({ provider: 'iqair' as const, metric: 'US AQI iQAir', value, city: 'Jakarta', sourceUrl: 'https://www.iqair.com/', observedAt: new Date('2026-01-01T00:00:00Z'), fetchedAt: new Date() });
@@ -20,6 +20,7 @@ describe('air accuracy rules', () => {
   });
   it('includes configured threshold alerts', () => expect(hourlyMessage(calculateSampleAverage([], 12), [reading(160)], undefined, [], 150)).toContain('⚠️ Air-quality alert:'));
   it('formats a daily trend summary', () => expect(dailySummaryMessage([{ city: 'Jakarta', hours: 24, count: 4, minimum: 80, maximum: 160, average: 120, latest: 100, direction: 'improving' }])).toContain('Trend: improving'));
+  it('uses cautious official AQI action guidance', () => expect(aqiActionGuidance(160)).toContain('everyone else should limit'));
 });
 
 class MemoryStore implements QuotaStore {
