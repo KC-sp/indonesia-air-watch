@@ -66,9 +66,15 @@ export class AirService {
 
   async removeTracked(id: string): Promise<void> { await this.db.trackedLocation.delete({ where: { id } }).catch(() => undefined); }
 
-  async alertSettings(): Promise<{ enabled: boolean; threshold?: number }> {
+  async alertSettings(): Promise<{ enabled: boolean; threshold?: number; cooldownMinutes: number; hysteresis: number; rapidRise: number }> {
     const settings = await this.settings();
-    return { enabled: settings.alertsEnabled, threshold: settings.alertThreshold ?? undefined };
+    return {
+      enabled: settings.alertsEnabled,
+      threshold: settings.alertThreshold ?? undefined,
+      cooldownMinutes: settings.alertCooldownMinutes,
+      hysteresis: settings.alertHysteresis,
+      rapidRise: settings.alertRapidRise,
+    };
   }
 
   async setAlertThreshold(threshold: number): Promise<void> {

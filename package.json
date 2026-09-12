@@ -1,8 +1,9 @@
 {
   "name": "indonesia-air-watch",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@12.3.4",
   "engines": { "node": ">=22" },
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -10,7 +11,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
-    "test": "vitest run test/air-service.test.ts test/air.test.ts test/auth.test.ts test/config.test.ts test/news.test.ts test/official.test.ts test/scheduler.test.ts test/trend-graph.test.ts",
+    "test": "vitest run test/air-service.test.ts test/air.test.ts test/alert-service.test.ts test/auth.test.ts test/config.test.ts test/dashboard.test.ts test/diagnostics.test.ts test/locations.test.ts test/news.test.ts test/official.test.ts test/scheduler.test.ts test/telegram-delivery.test.ts test/trend-graph.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "telegram:owner-id": "tsx src/cli/telegram-owner-id.ts"

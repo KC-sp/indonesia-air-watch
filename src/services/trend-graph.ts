@@ -3,14 +3,32 @@ import type { TrendPoint } from './air-service.js';
 
 type Color = [number, number, number, number];
 
+const FONT: Record<string, string[]> = {
+  ' ': ['000', '000', '000', '000', '000'],
+  '0': ['111', '101', '101', '101', '111'], '1': ['010', '110', '010', '010', '111'],
+  '2': ['111', '001', '111', '100', '111'], '3': ['111', '001', '111', '001', '111'],
+  '4': ['101', '101', '111', '001', '001'], '5': ['111', '100', '111', '001', '111'],
+  '6': ['111', '100', '111', '101', '111'], '7': ['111', '001', '010', '010', '010'],
+  '8': ['111', '101', '111', '101', '111'], '9': ['111', '101', '111', '001', '111'],
+  'A': ['010', '101', '111', '101', '101'], 'D': ['110', '101', '101', '101', '110'],
+  'E': ['111', '100', '110', '100', '111'], 'G': ['111', '100', '101', '101', '111'],
+  'I': ['111', '010', '010', '010', '111'], 'M': ['101', '111', '111', '101', '101'],
+  'Q': ['111', '101', '101', '111', '001'], 'R': ['110', '101', '110', '101', '101'],
+  'S': ['111', '100', '111', '001', '111'], 'T': ['111', '010', '010', '010', '010'],
+  'U': ['101', '101', '101', '101', '111'],
+  '/': ['001', '001', '010', '100', '100'], ':': ['000', '010', '000', '010', '000'],
+  '-': ['000', '000', '111', '000', '000'], '(': ['010', '100', '100', '100', '010'],
+  ')': ['010', '001', '001', '001', '010'],
+};
+
 export function createTrendGraph(points: TrendPoint[]): Buffer {
   const width = 900;
   const height = 500;
   const pixels = Buffer.alloc(width * height * 4, 255);
-  const left = 55;
+  const left = 95;
   const right = 25;
   const top = 25;
-  const bottom = 50;
+  const bottom = 90;
   const plotWidth = width - left - right;
   const plotHeight = height - top - bottom;
   const maximum = Math.max(50, ...points.map((point) => point.value));
@@ -37,6 +55,19 @@ export function createTrendGraph(points: TrendPoint[]): Buffer {
       if (twice <= dx) { error += dx; y1 += sy; }
     }
   };
+  const textWidth = (text: string, scale = 2) => Math.max(0, text.length * 4 * scale - scale);
+  const drawText = (text: string, x: number, yValue: number, color: Color, scale = 2, vertical = false) => {
+    [...text.toUpperCase()].forEach((character, characterIndex) => {
+      const glyph = FONT[character] ?? FONT[' '];
+      glyph.forEach((row, rowIndex) => [...row].forEach((pixel, columnIndex) => {
+        if (pixel !== '1') return;
+        for (let rowScale = 0; rowScale < scale; rowScale += 1) for (let columnScale = 0; columnScale < scale; columnScale += 1) {
+          if (vertical) setPixel(x + rowIndex * scale + rowScale, yValue - (characterIndex * 4 + columnIndex) * scale - columnScale, color);
+          else setPixel(x + (characterIndex * 4 + columnIndex) * scale + columnScale, yValue + rowIndex * scale + rowScale, color);
+        }
+      }));
+    });
+  };
 
   const bands: Array<[number, number, Color]> = [
     [0, 50, [225, 245, 229, 255]], [50, 100, [255, 249, 196, 255]], [100, 150, [255, 235, 205, 255]],
@@ -46,7 +77,11 @@ export function createTrendGraph(points: TrendPoint[]): Buffer {
     if (low >= scaleMaximum) continue;
     fill(left, y(Math.min(high, scaleMaximum)), left + plotWidth, y(low), color);
   }
-  for (let value = 0; value <= scaleMaximum; value += 50) line(left, y(value), left + plotWidth, y(value), [190, 195, 200, 255]);
+  for (let value = 0; value <= scaleMaximum; value += 50) {
+    line(left, y(value), left + plotWidth, y(value), [190, 195, 200, 255]);
+    const label = String(value);
+    drawText(label, left - textWidth(label) - 10, y(value) - 5, [55, 65, 75, 255]);
+  }
   line(left, top, left, top + plotHeight, [55, 65, 75, 255]);
   line(left, top + plotHeight, left + plotWidth, top + plotHeight, [55, 65, 75, 255]);
 
@@ -54,7 +89,25 @@ export function createTrendGraph(points: TrendPoint[]): Buffer {
   for (let index = 1; index < coordinates.length; index += 1) line(coordinates[index - 1].x, coordinates[index - 1].y, coordinates[index].x, coordinates[index].y, [20, 90, 180, 255]);
   for (const coordinate of coordinates) fill(coordinate.x - 3, coordinate.y - 3, coordinate.x + 3, coordinate.y + 3, [10, 65, 145, 255]);
 
+  const tickIndexes = [...new Set([0, Math.floor((points.length - 1) / 2), points.length - 1])];
+  for (const index of tickIndexes) {
+    const label = formatSgtTick(points[index].observedAt);
+    const xPosition = coordinates[index].x;
+    const labelX = index === 0 ? xPosition : index === points.length - 1 ? xPosition - textWidth(label) : xPosition - Math.round(textWidth(label) / 2);
+    drawText(label, labelX, top + plotHeight + 12, [55, 65, 75, 255]);
+  }
+  const xAxisTitle = 'TIME / DATE (SGT)';
+  drawText(xAxisTitle, left + Math.round((plotWidth - textWidth(xAxisTitle)) / 2), height - 20, [35, 45, 55, 255]);
+  const yAxisTitle = 'US AQI IQAIR';
+  drawText(yAxisTitle, 15, top + Math.round((plotHeight + textWidth(yAxisTitle)) / 2), [35, 45, 55, 255], 2, true);
+
   return encodePng(width, height, pixels);
+}
+
+function formatSgtTick(value: Date): string {
+  const sgt = new Date(value.getTime() + 8 * 3_600_000);
+  const two = (part: number) => String(part).padStart(2, '0');
+  return `${two(sgt.getUTCDate())}/${two(sgt.getUTCMonth() + 1)} ${two(sgt.getUTCHours())}:${two(sgt.getUTCMinutes())}`;
 }
 
 function encodePng(width: number, height: number, pixels: Buffer): Buffer {

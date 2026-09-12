@@ -1,6 +1,6 @@
 # Indonesia Air Watch
 
-Indonesia Air Watch is a private, owner-only Telegram bot that sends an hourly Indonesia iQAir city-sample update, tracks up to five custom Indonesian cities by default, stores trends, creates daily and weekly PNG graphs, sends threshold alerts and daily summaries, and can report approved official Indonesian ISPU readings.
+Indonesia Air Watch is a private, owner-only Telegram bot that sends an hourly Indonesia iQAir city-sample update, tracks up to five custom Indonesian cities by default, stores trends, creates labelled daily and weekly PNG graphs, sends smart alerts and daily summaries, and can report approved official Indonesian ISPU readings. It also supports one-time Telegram location matching and a pinned live dashboard.
 
 It does not use the term PSI. iQAir values are always labelled **US AQI iQAir**. Indonesian government values are only displayed as **ISPU <agency>** with their metric and stated period. The bot never converts one scale to another.
 
@@ -48,9 +48,13 @@ The national value is a geographically representative set of up to 12 configured
 
 All displayed observation times use WIB and SGT instead of raw UTC. Each reading includes the provider and direct data page. `/trend city` summarizes stored 24-hour observations. `/daily` shows the same daily summary that is automatically sent at 20:00 SGT. `/diagnostics` reports service, database, provider, quota, dispatch, and integration status.
 
-`/trendgraph Jakarta daily` creates a graph from the last 24 hours of stored readings. `/trendgraph Jakarta weekly` uses the last seven days. The caption shows latest, average, low, high, direction, and cautious US AQI activity guidance sourced from AirNow. Graph generation is local and does not use OpenAI or transmit readings to another chart provider.
+`/trendgraph Jakarta daily` creates a graph from the last 24 hours of stored readings. `/trendgraph Jakarta weekly` uses the last seven days. Each graph labels the y-axis as US AQI iQAir and the x-axis with SGT date/time ticks. The caption shows latest, average, low, high, direction, and cautious US AQI activity guidance sourced from AirNow. Graph generation is local and does not use OpenAI or transmit readings to another chart provider.
 
-Enable hourly threshold warnings with `/setalert 150`, inspect them with `/alerts`, and disable them with `/removealert`. Alerts use US AQI iQAir and do not convert values to PSI or ISPU.
+Enable smart warnings with `/setalert 150`, inspect them with `/alerts`, and disable them with `/removealert`. Alerts notify on threshold crossings, higher severity, rapid rises, and confirmed recovery while suppressing repeated unchanged warnings. Alerts use US AQI iQAir and do not convert values to PSI or ISPU.
+
+Use `/nearby` and tap **Use my location** to find the nearest supported city. The exact coordinates are used once for the match and are not written to the database. The bot asks for confirmation before adding the city.
+
+Use `/dashboard` to create or refresh a pinned live-status message. `/dashboardmode hourly` keeps normal top-of-hour messages as well as the dashboard. `/dashboardmode quiet` updates the dashboard hourly without sending a separate hourly report. Telegram sends are retried for temporary failures, scheduler and delivery attempts are recorded with correlation IDs, and `/diagnostics` reports active incidents and verifies the configured OpenAI model.
 
 ## Official Indonesian ISPU sources
 
@@ -66,7 +70,7 @@ OpenAI Responses API calls are limited to official-news summaries, source assess
 
 ## Commands
 
-`/start`, `/status`, `/air city[, state]`, `/setregion`, `/addregion city, state`, `/regions`, `/removeregion`, `/setalert number`, `/alerts`, `/removealert`, `/trend city`, `/trendgraph city daily|weekly`, `/daily`, `/explain city`, `/diagnostics`, `/news [topic]`, `/sources`, `/approvesource source-id CONFIRM`, `/version`, `/whoami`, `/help`.
+`/start`, `/status`, `/air city[, state]`, `/nearby`, `/setregion`, `/addregion city, state`, `/regions`, `/removeregion`, `/setalert number`, `/alerts`, `/removealert`, `/trend city`, `/trendgraph city daily|weekly`, `/daily`, `/dashboard`, `/dashboardmode hourly|quiet`, `/explain city`, `/diagnostics`, `/news [topic]`, `/sources`, `/approvesource source-id CONFIRM`, `/version`, `/whoami`, `/help`.
 
 `/help` uses a small category button menu so the owner does not need to read or remember the complete command list at once.
 

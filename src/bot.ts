@@ -1,23 +1,25 @@
+import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { Markup, Telegraf } from 'telegraf';
 import type { Config } from './config.js';
 import { ownerOnly } from './auth.js';
 import { aqiActionGuidance, dailySummaryMessage, formatReading, formatTrend, hourlyMessage } from './domain/air.js';
+import { nearestSupportedLocation, SUPPORTED_LOCATIONS } from './domain/locations.js';
+import { errorName, safeErrorMessage } from './errors.js';
+import { logger } from './logger.js';
 import { AirService } from './services/air-service.js';
 import { AirExplanationService } from './services/ai-explainer.js';
+import { AlertService } from './services/alert-service.js';
+import { DashboardService } from './services/dashboard-service.js';
 import { DiagnosticsService } from './services/diagnostics.js';
 import { formatNewsItem, OfficialNewsService } from './services/news.js';
+import { collectAirReport } from './services/report.js';
 import { SourceReviewService } from './services/source-review.js';
+import { retryTelegram } from './services/telegram-delivery.js';
 import { createTrendGraph } from './services/trend-graph.js';
 import { formatObservationTime } from './time.js';
 
-const TRACKABLE_CITIES = [
-  { city: 'Jakarta', state: 'Jakarta' }, { city: 'Bogor', state: 'West Java' }, { city: 'Bekasi', state: 'West Java' },
-  { city: 'Tangerang', state: 'Banten' }, { city: 'Depok', state: 'West Java' }, { city: 'Bandung', state: 'West Java' },
-  { city: 'Semarang', state: 'Central Java' }, { city: 'Surabaya', state: 'East Java' }, { city: 'Yogyakarta', state: 'Yogyakarta' },
-  { city: 'Medan', state: 'North Sumatra' }, { city: 'Pekanbaru', state: 'Riau' }, { city: 'Palembang', state: 'South Sumatra' },
-  { city: 'Pontianak', state: 'West Kalimantan' }, { city: 'Banjarmasin', state: 'South Kalimantan' }, { city: 'Makassar', state: 'South Sulawesi' },
-  { city: 'Denpasar', state: 'Bali' }, { city: 'Balikpapan', state: 'East Kalimantan' },
-];
+const APP_VERSION = (createRequire(import.meta.url)('../package.json') as { version: string }).version;
 const commandArgument = (text: string, command: string) => text.replace(new RegExp(`^/${command}(?:@\\w+)?\\s*`, 'i'), '').trim();
 const helpKeyboard = () => Markup.inlineKeyboard([
   [Markup.button.callback('🌤 Check air', 'help:air'), Markup.button.callback('📍 Locations', 'help:locations')],
@@ -32,9 +34,18 @@ export function createBot(
   sources: SourceReviewService,
   diagnostics: DiagnosticsService,
   explainer: AirExplanationService,
+  alerts: AlertService,
+  dashboard: DashboardService,
 ) {
   const bot = new Telegraf(config.TELEGRAM_BOT_TOKEN);
   bot.use(ownerOnly(config.OWNER_TELEGRAM_USER_ID));
+  bot.catch(async (error, ctx) => {
+    const correlationId = randomUUID();
+    logger.error({ correlationId, errorName: errorName(error), errorMessage: safeErrorMessage(error) }, 'Telegram command failed');
+    await retryTelegram(() => ctx.reply(`Something went wrong while processing that command. Please try again.\nReference: ${correlationId}`)).catch((replyError) => {
+      logger.error({ correlationId, errorMessage: safeErrorMessage(replyError) }, 'Telegram error reply failed');
+    });
+  });
   bot.start((ctx) => ctx.reply('Indonesia Air Watch is ready. This is a private bot. Use /help for commands.'));
   bot.command('help', (ctx) => ctx.reply('What would you like to do?', helpKeyboard()));
   bot.action(/^help:(.+)$/, async (ctx) => {
@@ -43,22 +54,19 @@ export function createBot(
     if (section === 'main') return ctx.editMessageText('What would you like to do?', helpKeyboard());
     const descriptions: Record<string, string> = {
       air: '🌤 Check air quality\n\n/status — full report\n/air Jakarta, Jakarta — one city',
-      locations: `📍 Manage locations\n\n/setregion — choose from buttons\n/addregion Jakarta, Jakarta — add any supported city\n/regions — show saved cities\n/removeregion — remove a city\n\nMaximum: ${config.TRACKED_IQAIR_CITY_LIMIT}`,
-      trends: '📈 Trends and alerts\n\n/trend Jakarta — text summary\n/trendgraph Jakarta daily — 24-hour graph\n/trendgraph Jakarta weekly — 7-day graph\n/daily — daily summary\n/setalert 150 — enable warning\n/alerts — view warning\n/removealert — disable warning',
+      locations: `📍 Manage locations\n\n/nearby — use your Telegram location\n/setregion — choose from buttons\n/addregion Jakarta, Jakarta — add any supported city\n/regions — show saved cities\n/removeregion — remove a city\n\nMaximum: ${config.TRACKED_IQAIR_CITY_LIMIT}`,
+      trends: '📈 Trends and smart alerts\n\n/trend Jakarta — text summary\n/trendgraph Jakarta daily — 24-hour graph\n/trendgraph Jakarta weekly — 7-day graph\n/daily — daily summary\n/setalert 150 — enable smart warnings\n/alerts — view warning rules\n/removealert — disable warnings',
       news: '📰 News and official sources\n\n/news air pollution — verified government news\n/sources — find official ISPU candidates\n/explain Jakarta — AI explanation',
-      system: '⚙️ Bot status\n\n/diagnostics — check service and scheduler\n/version — app version\n/whoami — owner ID',
+      system: '⚙️ Bot status\n\n/dashboard — create or refresh pinned live status\n/dashboardmode hourly — dashboard plus hourly messages\n/dashboardmode quiet — dashboard only\n/diagnostics — check service and scheduler\n/version — app version\n/whoami — owner ID',
     };
     return ctx.editMessageText(descriptions[section] ?? 'Choose a help category.', Markup.inlineKeyboard([[Markup.button.callback('← Back', 'help:main')]]));
   });
   bot.command('whoami', (ctx) => ctx.reply(config.OWNER_TELEGRAM_USER_ID));
-  bot.command('version', (ctx) => ctx.reply(`v${process.env.npm_package_version ?? '1.0.0'}\nGit: ${process.env.GIT_SHA ?? 'unavailable'}\nEnvironment: ${config.NODE_ENV}\nStarted: ${new Date().toISOString()}`));
+  bot.command('version', (ctx) => ctx.reply(`v${APP_VERSION}\nGit: ${process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.GIT_SHA ?? 'unavailable'}\nEnvironment: ${config.NODE_ENV}\nStarted: ${new Date().toISOString()}`));
 
   bot.command('status', async (ctx) => {
-    const tracked = await air.trackedStatus();
-    const sample = await air.sample();
-    const settings = await air.alertSettings();
-    const official = await air.officialReading('Jakarta');
-    await ctx.reply(hourlyMessage(sample.average, tracked.readings, official, tracked.unavailable, settings.enabled ? settings.threshold : undefined));
+    const report = await collectAirReport(air);
+    await ctx.reply(hourlyMessage(report.sample.average, report.tracked.readings, report.official, report.tracked.unavailable, report.alertSettings.enabled ? report.alertSettings.threshold : undefined));
   });
   bot.command('air', async (ctx) => {
     const query = commandArgument(ctx.message.text, 'air');
@@ -67,7 +75,8 @@ export function createBot(
     const result = await air.lookup(city, state.join(', ') || undefined);
     await ctx.reply([result.iqair && formatReading(result.iqair), result.official && formatReading(result.official), !result.iqair && !result.official && 'No current reading is available.'].filter(Boolean).join('\n\n'));
   });
-  bot.command('setregion', (ctx) => ctx.reply(`Choose up to ${config.TRACKED_IQAIR_CITY_LIMIT} cities to show separately in hourly updates.`, Markup.inlineKeyboard(TRACKABLE_CITIES.map((location) => [Markup.button.callback(`${location.city}, ${location.state}`, `add:${location.city}|${location.state}`)]))));
+  bot.command('setregion', (ctx) => ctx.reply(`Choose up to ${config.TRACKED_IQAIR_CITY_LIMIT} cities to show separately in hourly updates.`, Markup.inlineKeyboard(SUPPORTED_LOCATIONS.map((location) => [Markup.button.callback(`${location.city}, ${location.state}`, `add:${location.city}|${location.state}`)]))));
+  bot.command('nearby', (ctx) => ctx.reply('Tap the button below to privately share your current location. The bot uses it once to choose the nearest supported city and does not save your coordinates.', Markup.keyboard([[Markup.button.locationRequest('📍 Use my location')]]).resize().oneTime()));
   bot.command('addregion', async (ctx) => {
     const query = commandArgument(ctx.message.text, 'addregion');
     const [city, state] = query.split(',').map((value) => value.trim());
@@ -80,6 +89,13 @@ export function createBot(
     const outcome = await air.addTracked({ city, state });
     await ctx.answerCbQuery();
     await ctx.editMessageText(addRegionResult(city, outcome, config.TRACKED_IQAIR_CITY_LIMIT));
+  });
+  bot.action(/^tracknear:(\d+)$/, async (ctx) => {
+    const location = SUPPORTED_LOCATIONS[Number(ctx.match[1])];
+    if (!location) return ctx.answerCbQuery('Location is no longer available.');
+    const outcome = await air.addTracked(location);
+    await ctx.answerCbQuery();
+    await ctx.editMessageText(addRegionResult(location.city, outcome, config.TRACKED_IQAIR_CITY_LIMIT));
   });
   bot.command('regions', async (ctx) => {
     const locations = await air.trackedLocations();
@@ -95,13 +111,30 @@ export function createBot(
     const threshold = Number(commandArgument(ctx.message.text, 'setalert'));
     if (!Number.isInteger(threshold) || threshold < 1 || threshold > 500) return ctx.reply('Usage: /setalert number (1–500)\nExample: /setalert 150');
     await air.setAlertThreshold(threshold);
-    await ctx.reply(`Hourly alerts enabled at ${threshold} US AQI iQAir.`);
+    await alerts.reset();
+    await ctx.reply(`Smart alerts enabled at ${threshold} US AQI iQAir. You will be notified when a tracked location crosses the threshold, worsens to a higher severity, rises rapidly, or recovers. Repeated unchanged warnings are suppressed.`);
   });
   bot.command('alerts', async (ctx) => {
     const settings = await air.alertSettings();
-    await ctx.reply(settings.enabled && settings.threshold ? `Alerts are enabled at ${settings.threshold} US AQI iQAir.` : 'Alerts are disabled. Use /setalert 150 to enable them.');
+    await ctx.reply(settings.enabled && settings.threshold ? `Smart alerts are enabled at ${settings.threshold} US AQI iQAir.\nCooldown: ${settings.cooldownMinutes} minutes\nRecovery: 2 readings at or below ${Math.max(0, settings.threshold - settings.hysteresis)}\nRapid rise: ${settings.rapidRise} points within 2 hours` : 'Alerts are disabled. Use /setalert 150 to enable them.');
   });
-  bot.command('removealert', async (ctx) => { await air.disableAlerts(); await ctx.reply('Air-quality alerts disabled.'); });
+  bot.command('removealert', async (ctx) => { await air.disableAlerts(); await alerts.reset(); await ctx.reply('Air-quality alerts disabled.'); });
+
+  bot.command('dashboard', async (ctx) => {
+    await dashboard.ensure(ctx.telegram, await collectAirReport(air), randomUUID());
+    await ctx.reply('Your live status dashboard is ready and pinned. Use its Refresh button whenever you want.');
+  });
+  bot.command('dashboardmode', async (ctx) => {
+    const requested = commandArgument(ctx.message.text, 'dashboardmode').toLowerCase();
+    if (requested !== 'hourly' && requested !== 'quiet') return ctx.reply('Usage: /dashboardmode hourly\nor /dashboardmode quiet');
+    const mode = requested === 'quiet' ? 'QUIET' : 'HOURLY';
+    if (!(await dashboard.setMode(mode))) return ctx.reply('Create your dashboard first with /dashboard.');
+    await dashboard.ensure(ctx.telegram, await collectAirReport(air), randomUUID());
+    await ctx.reply(mode === 'QUIET' ? 'Dashboard-only mode enabled. The dashboard will refresh hourly without sending a separate hourly message.' : 'Hourly message mode enabled. You will receive the regular top-of-hour message and the dashboard will refresh too.');
+  });
+  bot.action('dash:refresh', async (ctx) => { await dashboard.ensure(ctx.telegram, await collectAirReport(air), randomUUID()); await ctx.answerCbQuery('Dashboard refreshed'); });
+  bot.action('dash:trends', async (ctx) => { await ctx.answerCbQuery(); await ctx.reply('Use /trendgraph City daily or /trendgraph City weekly. Example: /trendgraph Jakarta daily'); });
+  bot.action('dash:alerts', async (ctx) => { const settings = await air.alertSettings(); await ctx.answerCbQuery(); await ctx.reply(settings.enabled && settings.threshold ? `Smart alerts are enabled at ${settings.threshold} US AQI. Use /alerts for all rules.` : 'Smart alerts are disabled. Use /setalert 150 to enable them.'); });
 
   bot.command('trend', async (ctx) => {
     const city = commandArgument(ctx.message.text, 'trend');
@@ -139,6 +172,14 @@ export function createBot(
   bot.command('news', async (ctx) => { const topic = commandArgument(ctx.message.text, 'news') || 'environment'; const items = await news.latest(topic); await ctx.reply(items.length ? items.map(formatNewsItem).join('\n\n') : 'No verified original official article was found.'); });
   bot.command('sources', async (ctx) => { const candidates = await sources.discover(); await ctx.reply(candidates.length ? candidates.map((candidate) => `${candidate.id}\n${candidate.agency} (${candidate.domain})\n${candidate.metric}; ${candidate.period}; ${candidate.coverage}\n${candidate.recommendation}, confidence ${candidate.confidenceScore}\n${candidate.endpoint}`).join('\n\n') : 'No verified official source was found. Official ISPU currently unavailable.'); });
   bot.command('approvesource', async (ctx) => { const [, id, confirmation] = ctx.message.text.trim().split(/\s+/); if (!id) return ctx.reply('Usage: /approvesource source-id CONFIRM'); const result = await sources.approve(id, confirmation ?? '', config.OWNER_TELEGRAM_USER_ID); await ctx.reply(result === 'approved' ? 'Source approval recorded. Configure its deterministic provider adapter before publishing readings.' : result === 'confirm' ? 'Repeat with /approvesource source-id CONFIRM to record approval.' : 'Source candidate not found.'); });
+  bot.on('location', async (ctx) => {
+    const nearest = nearestSupportedLocation(ctx.message.location.latitude, ctx.message.location.longitude);
+    await ctx.reply('Location received. Your exact coordinates were not saved.', Markup.removeKeyboard());
+    if (!nearest) return ctx.reply('I could not understand that location. Please try /nearby again.');
+    const result = await air.lookup(nearest.location.city, nearest.location.state);
+    const reading = result.iqair ? `\nCurrent reading: ${result.iqair.value} US AQI iQAir (${result.iqair.category})` : '\nA current reading could not be verified right now.';
+    await ctx.reply(`Nearest supported city: ${nearest.location.city}, ${nearest.location.state}\nDistance from city centre: ${Math.round(nearest.distanceKm)} km${reading}`, Markup.inlineKeyboard([[Markup.button.callback(`Track ${nearest.location.city}`, `tracknear:${nearest.index}`)]]));
+  });
   bot.on('text', (ctx) => ctx.reply('Use /help for commands.'));
   return bot;
 }

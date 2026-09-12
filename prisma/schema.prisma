@@ -19,71 +19,160 @@ enum ProviderState {
 }
 
 model UserSettings {
-  id                 Int      @id @default(1)
-  nationalSample     Json     @default("[]")
-  officialAllowlist  Json     @default("[\"indonesia.go.id\",\"kemenlh.go.id\",\"menlhk.go.id\",\"klhk.go.id\",\"bmkg.go.id\",\"bnpb.go.id\",\"data.go.id\",\"jakarta.go.id\"]")
-  alertThreshold     Int?
-  alertsEnabled      Boolean  @default(false)
-  dailySummaryHour   Int      @default(20)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                   Int      @id @default(1)
+  nationalSample       Json     @default("[]")
+  officialAllowlist    Json     @default("[\"indonesia.go.id\",\"kemenlh.go.id\",\"menlhk.go.id\",\"klhk.go.id\",\"bmkg.go.id\",\"bnpb.go.id\",\"data.go.id\",\"jakarta.go.id\"]")
+  alertThreshold       Int?
+  alertsEnabled        Boolean  @default(false)
+  alertCooldownMinutes Int      @default(180)
+  alertHysteresis      Int      @default(10)
+  alertRapidRise       Int      @default(25)
+  dailySummaryHour     Int      @default(20)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 }
 
 model TrackedLocation {
-  id         String   @id @default(cuid())
-  provider   String
-  city       String
-  state      String?
-  country    String   @default("Indonesia")
-  stationId  String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(cuid())
+  provider  String
+  city      String
+  state     String?
+  country   String   @default("Indonesia")
+  stationId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([provider, city, state])
 }
 
 model AirObservation {
-  id          String          @id @default(cuid())
-  provider    String
-  providerId  String?
-  kind        ObservationKind
-  metric      String
-  value       Int
-  category    String?
-  period      String?
-  city        String
-  region      String?
-  station     String?
-  sourceUrl   String
-  observedAt  DateTime
-  fetchedAt   DateTime        @default(now())
-  metadata    Json?
+  id         String          @id @default(cuid())
+  provider   String
+  providerId String?
+  kind       ObservationKind
+  metric     String
+  value      Int
+  category   String?
+  period     String?
+  city       String
+  region     String?
+  station    String?
+  sourceUrl  String
+  observedAt DateTime
+  fetchedAt  DateTime        @default(now())
+  metadata   Json?
+
   @@unique([provider, providerId, metric, observedAt])
   @@index([city, fetchedAt])
 }
 
 model HourlyDispatch {
-  id         String   @id @default(cuid())
-  hourBucket DateTime @unique
-  status     String   @default("SENDING")
-  sentAt     DateTime?
-  error      String?
-  createdAt  DateTime @default(now())
+  id            String    @id @default(cuid())
+  hourBucket    DateTime  @unique
+  status        String    @default("SENDING")
+  correlationId String?
+  attemptCount  Int       @default(1)
+  sentAt        DateTime?
+  error         String?
+  createdAt     DateTime  @default(now())
 }
 
 model DailyDispatch {
-  id         String   @id @default(cuid())
-  dayBucket  DateTime @unique
-  status     String   @default("SENDING")
-  sentAt     DateTime?
-  error      String?
-  createdAt  DateTime @default(now())
+  id            String    @id @default(cuid())
+  dayBucket     DateTime  @unique
+  status        String    @default("SENDING")
+  correlationId String?
+  attemptCount  Int       @default(1)
+  sentAt        DateTime?
+  error         String?
+  createdAt     DateTime  @default(now())
+}
+
+model AlertState {
+  id               String    @id @default(cuid())
+  provider         String
+  city             String
+  region           String    @default("")
+  threshold        Int
+  status           String    @default("NORMAL")
+  lastValue        Int?
+  lastCategory     String?
+  lastObservedAt   DateTime?
+  consecutiveBelow Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([provider, city, region])
+}
+
+model AlertEvent {
+  id            String    @id @default(cuid())
+  dedupeKey     String    @unique
+  provider      String
+  city          String
+  region        String    @default("")
+  eventType     String
+  value         Int
+  previousValue Int?
+  threshold     Int
+  category      String
+  message       String
+  observedAt    DateTime
+  sentAt        DateTime?
+  deliveryError String?
+  createdAt     DateTime  @default(now())
+
+  @@index([sentAt, createdAt])
+  @@index([provider, city, region, eventType, createdAt])
+}
+
+model DashboardMessage {
+  id               Int       @id @default(1)
+  chatId           String
+  messageId        Int
+  mode             String    @default("HOURLY")
+  lastRenderedHash String?
+  lastUpdatedAt    DateTime?
+  pinnedAt         DateTime?
+  lastError        String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model DeliveryAttempt {
+  id            String    @id @default(cuid())
+  kind          String
+  correlationId String
+  chatId        String
+  status        String    @default("SENDING")
+  attemptCount  Int       @default(0)
+  messageId     Int?
+  error         String?
+  createdAt     DateTime  @default(now())
+  completedAt   DateTime?
+
+  @@index([correlationId])
+  @@index([kind, createdAt])
+}
+
+model ServiceIncident {
+  key                String    @id
+  status             String    @default("OPEN")
+  summary            String
+  correlationId      String?
+  firstSeenAt        DateTime  @default(now())
+  lastSeenAt         DateTime  @default(now())
+  notifiedAt         DateTime?
+  recoveredAt        DateTime?
+  recoveryNotifiedAt DateTime?
+  updatedAt          DateTime  @updatedAt
 }
 
 model ProviderHealth {
   provider      String        @id
   state         ProviderState @default(UNAVAILABLE)
-  lastSuccessAt  DateTime?
-  lastFailureAt  DateTime?
+  lastSuccessAt DateTime?
+  lastFailureAt DateTime?
   errorSummary  String?
   updatedAt     DateTime      @updatedAt
 }
@@ -119,5 +208,6 @@ model ProviderQuotaUsage {
   provider String
   bucket   DateTime
   count    Int      @default(0)
+
   @@unique([provider, bucket])
 }

@@ -7,4 +7,10 @@ describe('trend graph', () => {
     expect([...image.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
     expect(image.length).toBeGreaterThan(1_000);
   });
+
+  it('renders observation times into the x-axis labels', () => {
+    const first = createTrendGraph([{ observedAt: new Date('2026-01-01T00:00:00Z'), value: 80 }, { observedAt: new Date('2026-01-01T01:00:00Z'), value: 160 }]);
+    const shifted = createTrendGraph([{ observedAt: new Date('2026-01-02T00:00:00Z'), value: 80 }, { observedAt: new Date('2026-01-02T01:00:00Z'), value: 160 }]);
+    expect(shifted.equals(first)).toBe(false);
+  });
 });
